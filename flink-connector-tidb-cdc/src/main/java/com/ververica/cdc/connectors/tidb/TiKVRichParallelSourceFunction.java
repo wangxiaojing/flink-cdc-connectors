@@ -70,6 +70,8 @@ public class TiKVRichParallelSourceFunction<T> extends RichParallelSourceFunctio
     private final String tableName;
 
     // Task local variables
+
+    private transient long tableId = -1L;
     private transient TiSession session = null;
     private transient Coprocessor.KeyRange keyRange = null;
     private transient CDCClient cdcClient = null;
@@ -101,7 +103,7 @@ public class TiKVRichParallelSourceFunction<T> extends RichParallelSourceFunctio
     public void open(final Configuration config) throws Exception {
         super.open(config);
         session = TiSession.create(tiConf);
-        long tableId = session.getCatalog().getTable(database, tableName).getId();
+        tableId = session.getCatalog().getTable(database, tableName).getId();
         keyRange =
                 TableKeyRangeUtils.getTableKeyRange(
                         tableId,
@@ -141,14 +143,14 @@ public class TiKVRichParallelSourceFunction<T> extends RichParallelSourceFunctio
             // Don't handle index key for now
             return;
         }
-        LOG.debug("binlog record, type: {}, data: {}", row.getType(), row);
+        LOG.info("binlog record, type: {}, data: {}", row.getType(), row);
         switch (row.getType()) {
             case COMMITTED:
                 prewrites.put(RowKeyWithTs.ofStart(row), row);
-                commits.put(RowKeyWithTs.ofCommit(row), row);
+                commits.put(RowKeyWithTs.ofStart(row), row);
                 break;
             case COMMIT:
-                commits.put(RowKeyWithTs.ofCommit(row), row);
+                commits.put(RowKeyWithTs.ofStart(row), row);
                 break;
             case PREWRITE:
                 prewrites.put(RowKeyWithTs.ofStart(row), row);
@@ -202,10 +204,18 @@ public class TiKVRichParallelSourceFunction<T> extends RichParallelSourceFunctio
                 }
                 handleRow(row);
             }
-            resolvedTs = cdcClient.getMinResolvedTs();
+            resolvedTs = cdcClient.getMaxResolvedTs();
             if (commits.size() > 0) {
                 flushRows(resolvedTs);
             }
+
+            keyRange =
+                    TableKeyRangeUtils.getTableKeyRange(
+                            tableId,
+                            getRuntimeContext().getNumberOfParallelSubtasks(),
+                            getRuntimeContext().getIndexOfThisSubtask());
+
+            cdcClient.update(keyRange, resolvedTs);
         }
     }
 
