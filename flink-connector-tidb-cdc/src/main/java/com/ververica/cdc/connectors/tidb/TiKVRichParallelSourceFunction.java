@@ -18,6 +18,8 @@
 
 package com.ververica.cdc.connectors.tidb;
 
+import com.ververica.cdc.connectors.tidb.table.StartupMode;
+import com.ververica.cdc.connectors.tidb.table.utils.TableKeyRangeUtils;
 import org.apache.flink.api.common.state.CheckpointListener;
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
@@ -31,9 +33,6 @@ import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.Preconditions;
-
-import com.ververica.cdc.connectors.tidb.table.StartupMode;
-import com.ververica.cdc.connectors.tidb.table.utils.TableKeyRangeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.tikv.cdc.CDCClient;
@@ -130,10 +129,10 @@ public class TiKVRichParallelSourceFunction<T> extends RichParallelSourceFunctio
             }
         } else {
             LOG.info("Skip snapshot read");
+            resolvedTs = session.getTimestamp().getVersion();
         }
 
         LOG.info("start read change events");
-        resolvedTs = session.getTimestamp().getVersion();
         cdcClient.start(resolvedTs);
         readChangeEvents();
     }
