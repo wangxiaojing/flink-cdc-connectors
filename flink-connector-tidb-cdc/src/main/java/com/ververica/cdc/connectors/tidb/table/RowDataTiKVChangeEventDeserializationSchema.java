@@ -62,46 +62,56 @@ public class RowDataTiKVChangeEventDeserializationSchema
         if (tableInfo == null) {
             tableInfo = fetchTableInfo();
         }
-        final RowKey rowKey = RowKey.decode(row.getKey().toByteArray());
-        final long handle = rowKey.getHandle();
-        Object[] tikvValues;
+        if (row != null) {
+            final RowKey rowKey = RowKey.decode(row.getKey().toByteArray());
+            final long handle = rowKey.getHandle();
+            Object[] tikvValues;
 
-        switch (row.getOpType()) {
-            case DELETE:
-                tikvValues = decodeObjects(row.getOldValue().toByteArray(), handle, tableInfo);
-                RowData rowDataDelete =
-                        (RowData) physicalConverter.convert(tikvValues, tableInfo, null);
-                rowDataDelete.setRowKind(RowKind.DELETE);
-                emit(new TiKVMetadataConverter.TiKVRowValue(row), rowDataDelete, out);
-                break;
-            case PUT:
-                try {
-                    tikvValues =
-                            decodeObjects(
-                                    row.getValue().toByteArray(),
-                                    RowKey.decode(row.getKey().toByteArray()).getHandle(),
-                                    tableInfo);
-                    if (row.getOldValue() == null || row.getOldValue().isEmpty()) {
-                        RowData rowDataUpdateBefore =
-                                (RowData) physicalConverter.convert(tikvValues, tableInfo, null);
-                        rowDataUpdateBefore.setRowKind(RowKind.INSERT);
-                        emit(new TiKVMetadataConverter.TiKVRowValue(row), rowDataUpdateBefore, out);
-                    } else {
-                        RowData rowDataUpdateAfter =
-                                (RowData) physicalConverter.convert(tikvValues, tableInfo, null);
-                        rowDataUpdateAfter.setRowKind(RowKind.UPDATE_AFTER);
-                        emit(new TiKVMetadataConverter.TiKVRowValue(row), rowDataUpdateAfter, out);
-                    }
+            switch (row.getOpType()) {
+                case DELETE:
+                    tikvValues = decodeObjects(row.getOldValue().toByteArray(), handle, tableInfo);
+                    RowData rowDataDelete =
+                            (RowData) physicalConverter.convert(tikvValues, tableInfo, null);
+                    rowDataDelete.setRowKind(RowKind.DELETE);
+                    emit(new TiKVMetadataConverter.TiKVRowValue(row), rowDataDelete, out);
                     break;
-                } catch (final RuntimeException e) {
-                    throw new FlinkRuntimeException(
-                            String.format(
-                                    "Fail to deserialize row: %s, table: %s",
-                                    row, tableInfo.getId()),
-                            e);
-                }
-            default:
-                throw new IllegalArgumentException("Unknown Row Op Type: " + row.getOpType());
+                case PUT:
+                    try {
+                        tikvValues =
+                                decodeObjects(
+                                        row.getValue().toByteArray(),
+                                        RowKey.decode(row.getKey().toByteArray()).getHandle(),
+                                        tableInfo);
+                        if (row.getOldValue() == null || row.getOldValue().isEmpty()) {
+                            RowData rowDataUpdateBefore =
+                                    (RowData)
+                                            physicalConverter.convert(tikvValues, tableInfo, null);
+                            rowDataUpdateBefore.setRowKind(RowKind.INSERT);
+                            emit(
+                                    new TiKVMetadataConverter.TiKVRowValue(row),
+                                    rowDataUpdateBefore,
+                                    out);
+                        } else {
+                            RowData rowDataUpdateAfter =
+                                    (RowData)
+                                            physicalConverter.convert(tikvValues, tableInfo, null);
+                            rowDataUpdateAfter.setRowKind(RowKind.UPDATE_AFTER);
+                            emit(
+                                    new TiKVMetadataConverter.TiKVRowValue(row),
+                                    rowDataUpdateAfter,
+                                    out);
+                        }
+                        break;
+                    } catch (final RuntimeException e) {
+                        throw new FlinkRuntimeException(
+                                String.format(
+                                        "Fail to deserialize row: %s, table: %s",
+                                        row, tableInfo.getId()),
+                                e);
+                    }
+                default:
+                    throw new IllegalArgumentException("Unknown Row Op Type: " + row.getOpType());
+            }
         }
     }
 
